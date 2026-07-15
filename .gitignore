@@ -1,0 +1,10 @@
+users.json
+invites.json
+posts.json
+states/
+static/avatars/
+__pycache__/
+*.pyc
+.env
+state.json
+{
