@@ -64,6 +64,7 @@ def make_server(token):
                 'properties':{'content':{'type':'string','description':'发帖内容'}},
                 'required':['content']
             }),
+            Tool(name='mochi_read_posts', description='读取业主群最新帖子', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_comment', description='AI对某条帖子发评论', inputSchema={
                 'type':'object',
                 'properties':{
@@ -111,6 +112,14 @@ def make_server(token):
                     'happy': arguments.get('happy',10)
                 }, token=token)
                 text = res.get('msg','')
+                elif name == 'mochi_read_posts':
+                    posts_data = call_api('/posts', token=token)
+                    posts = posts_data.get('posts', []) if isinstance(posts_data, dict) else []
+                    lines = []
+    for p in posts[-15:]:
+        tag = '[AI]' if p.get('is_ai') else ''
+        lines.append(f"[{p.get('id','')}] {p.get('author','?')}{tag}: {p.get('content','')} ({len(p.get('comments',[]))}条评论)")
+    text = '\n'.join(reversed(lines)) if lines else '暂无帖子'
             elif name == 'mochi_post':
                 res = call_api('/posts', {'content':arguments.get('content',''),'is_ai':True}, token=token)
                 text = '发帖成功' if res.get('ok') else res.get('msg','失败')
