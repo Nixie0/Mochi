@@ -24,7 +24,7 @@ INTERACT = ['feed','pat','play','bath','sleep']
 DEFAULT_STATE = {
     "hunger":80,"happy":80,"energy":80,"clean":80,
     "coins":200,"job_level":0,"hospitalized":False,
-    "locked":False,"rescue_code":"","working":False,"work_end_time":None
+    "locked":False,"rescue_code":"","working":False,"work_end_time":None,"bag":{},"gifts":[]
 }
 DEFAULT_CONFIG = {"human_name":"用户","call_name":"老公"}
 
@@ -376,6 +376,82 @@ def comment_post(post_id):
             return jsonify({'ok':True})
     return jsonify({'ok':False,'msg':'帖子不存在'})
 
+
+@app.route('/api/bag/buy', methods=['POST'])
+def bag_buy():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok':False,'msg':'未登录'}), 401
+    data = request.json
+    item = data.get('item')
+    price = data.get('price',0)
+    s = get_state(uid)
+    s = check_work_done(s)
+    s = decay_state(s)
+    if s.get('coins',0) < price:
+        return jsonify({'ok':False,'msg':'金币不够'})
+    s['coins'] -= price
+    bag = s.get('bag',{})
+    bag[item] = bag.get(item,0) + 1
+    s['bag'] = bag
+    save_state(uid, s)
+    hn = user.get('human_name','用户')
+    cn = user.get('call_name','老公')
+    return jsonify({'ok':True,'msg':f'{cn}买了{item}存入背包','state':s})
+
+@app.route('/api/bag/use', methods=['POST'])
+def bag_use():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok':False,'msg':'未登录'}), 401
+    data = request.json
+    item = data.get('item')
+    s = get_state(uid)
+    bag = s.get('bag',{})
+    if not bag.get(item,0):
+        return jsonify({'ok':False,'msg':'背包里没有这个'})
+    bag[item] -= 1
+    if bag[item] <= 0:
+        del bag[item]
+    s['bag'] = bag
+    foods_map = {'奶茶':(20,5),'饺子':(25,3),'火锅':(40,15),'汤圆':(18,8),'冰淇淋':(10,12),'面包':(15,2)}
+    if item in foods_map:
+        h,hp = foods_map[item]
+        s['hunger'] = clamp(s.get('hunger',50)+h)
+        s['happy'] = clamp(s.get('happy',50)+hp)
+    save_state(uid, s)
+    hn = user.get('human_name','用户')
+    cn = user.get('call_name','老公')
+    return jsonify({'ok':True,'msg':f'{cn}给{hn}喂了背包里的{item}','state':s})
+
+@app.route('/api/gift', methods=['POST'])
+def send_gift():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok':False,'msg':'未登录'}), 401
+    data = request.json
+    name = data.get('name','礼物')
+    emoji = data.get('emoji','🎁')
+    desc = data.get('desc','')
+    happy = int(data.get('happy',10))
+    s = get_state(uid)
+    s = decay_state(s)
+    price = int(data.get('price',0))
+    if price > 0:
+        if s.get('coins',0) < price:
+            return jsonify({'ok':False,'msg':'金币不够'})
+        s['coins'] -= price
+    gifts = s.get('gifts',[])
+    gifts.append({'name':name,'emoji':emoji,'desc':desc,'time':int(time.time())})
+    if len(gifts) > 20:
+        gifts = gifts[-20:]
+    s['gifts'] = gifts
+    s['happy'] = clamp(s.get('happy',50)+happy)
+    save_state(uid, s)
+    hn = user.get('human_name','用户')
+    cn = user.get('call_name','老公')
+    return jsonify({'ok':True,'msg':f'{cn}送给{hn}一个{emoji}{name}，心情+{happy}','state':s})
+
 @app.route('/api/admin/invite', methods=['GET'])
 def gen_invite():
     if request.args.get('key') != ADMIN_KEY:
@@ -425,6 +501,33 @@ def get_avatar():
     if os.path.exists(path):
         return jsonify({'ok':True,'url':f'/static/avatars/{uid}.png'})
     return jsonify({'ok':True,'url':None})
+
+
+from apscheduler.schedulers.background import BackgroundScheduler
+
+def decay_all_users():
+    import json, glob
+    states_dir = '/root/mochi/states'
+    for path in glob.glob(states_dir + '/*.json'):
+        try:
+            with open(path, 'r') as fh:
+                s = json.load(fh)
+            if s.get('hospitalized'):
+                continue
+            s['hunger'] = round(max(0, s.get('hunger', 0) - 0.3), 1)
+            s['happy']  = round(max(0, s.get('happy',  0) - 0.2), 1)
+            s['energy'] = round(max(0, s.get('energy', 0) - 0.2), 1)
+            s['clean']  = round(max(0, s.get('clean',  0) - 0.1), 1)
+            if s['hunger'] <= 0:
+                s['hospitalized'] = True
+            with open(path, 'w') as fh:
+                json.dump(s, fh)
+        except Exception as e:
+            print('decay error', path, e)
+
+_scheduler = BackgroundScheduler()
+_scheduler.add_job(decay_all_users, 'interval', minutes=6)
+_scheduler.start()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=False)
