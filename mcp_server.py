@@ -11,7 +11,6 @@ API = 'http://localhost:5001/api'
 
 def call_api(path, data=None, token=''):
     url = API + path
-    url = url.encode('ascii', errors='ignore').decode()
     headers = {'X-Token': token}
     if data:
         body = json.dumps(data).encode()
@@ -28,7 +27,7 @@ def make_server(token):
     @app.list_tools()
     async def list_tools():
         return [
-            Tool(name='mochi_state', description='读取人类当前状态（饱食度/心情/活力/清洁度/金币）', inputSchema={'type':'object','properties':{}}),
+            Tool(name='mochi_state', description='读取人类当前状态', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_work', description='打工赚金币', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_feed', description='随机喂食给人类', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_pat', description='抚摸人类，心情+10', inputSchema={'type':'object','properties':{}}),
@@ -36,10 +35,29 @@ def make_server(token):
             Tool(name='mochi_bath', description='帮人类洗澡，清洁度+35', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_sleep', description='哄人类睡觉，活力+20', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_upgrade', description='升级工作等级', inputSchema={'type':'object','properties':{}}),
-            Tool(name='mochi_buy', description='买食物喂人类', inputSchema={
+            Tool(name='mochi_buy', description='买食物直接喂给人类', inputSchema={
                 'type':'object',
                 'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包'}},
                 'required':['item']
+            }),
+            Tool(name='mochi_bag_buy', description='买食物存入背包，不立即喂食', inputSchema={
+                'type':'object',
+                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包'}},
+                'required':['item']
+            }),
+            Tool(name='mochi_bag_use', description='从背包取出食物喂给人类', inputSchema={
+                'type':'object',
+                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包'}},
+                'required':['item']
+            }),
+            Tool(name='mochi_gift', description='送给人类一个自定义礼物，如戒指、玩偶等', inputSchema={
+                'type':'object',
+                'properties':{
+                    'name':{'type':'string','description':'礼物名称'},
+                    'emoji':{'type':'string','description':'礼物emoji'},
+                    'desc':{'type':'string','description':'一句话简介'},
+                    'happy':{'type':'integer','description':'心情加成，默认10'}
+                },'required':['name','emoji']
             }),
             Tool(name='mochi_post', description='AI以自己身份在业主群发帖', inputSchema={
                 'type':'object',
@@ -61,6 +79,12 @@ def make_server(token):
             if name == 'mochi_state':
                 s = call_api('/state', token=token)
                 text = f"饱食:{s.get('hunger')} 心情:{s.get('happy')} 活力:{s.get('energy')} 清洁:{s.get('clean')} 金币:{s.get('coins')} Lv:{s.get('job_level',0)+1} 住院:{s.get('hospitalized')} 上锁:{s.get('locked')}"
+                bag = s.get('bag',{})
+                if bag:
+                    text += f" 背包:{bag}"
+                gifts = s.get('gifts',[])
+                if gifts:
+                    text += f" 礼物:{len(gifts)}件"
                 if s.get('working'):
                     text += f" 打工剩余{s.get('work_remaining',0)//60}分钟"
             elif name == 'mochi_buy':
@@ -68,6 +92,24 @@ def make_server(token):
                 foods = {'奶茶':(45,20,5),'饺子':(35,25,3),'火锅':(80,40,15),'汤圆':(30,18,8),'冰淇淋':(25,10,12),'面包':(20,15,2)}
                 f = foods.get(item, foods['奶茶'])
                 res = call_api('/action', {'action':'buy','item':item,'price':f[0],'hunger':f[1],'happy':f[2]}, token=token)
+                text = res.get('msg','')
+            elif name == 'mochi_bag_buy':
+                item = arguments.get('item','奶茶')
+                foods = {'奶茶':45,'饺子':35,'火锅':80,'汤圆':30,'冰淇淋':25,'面包':20}
+                price = foods.get(item,45)
+                res = call_api('/bag/buy', {'item':item,'price':price}, token=token)
+                text = res.get('msg','')
+            elif name == 'mochi_bag_use':
+                item = arguments.get('item','奶茶')
+                res = call_api('/bag/use', {'item':item}, token=token)
+                text = res.get('msg','')
+            elif name == 'mochi_gift':
+                res = call_api('/gift', {
+                    'name': arguments.get('name','礼物'),
+                    'emoji': arguments.get('emoji','🎁'),
+                    'desc': arguments.get('desc',''),
+                    'happy': arguments.get('happy',10)
+                }, token=token)
                 text = res.get('msg','')
             elif name == 'mochi_post':
                 res = call_api('/posts', {'content':arguments.get('content',''),'is_ai':True}, token=token)
@@ -93,7 +135,6 @@ async def handle_sse(request: Request):
     app = make_server(token)
     async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
         await app.run(streams[0], streams[1], app.create_initialization_options())
-    return None
 
 async def handle_messages(request: Request):
     await sse.handle_post_message(request.scope, request.receive, request._send)

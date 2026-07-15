@@ -263,6 +263,10 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
     <div class="dice-result" id="diceResult"></div>
   </div>
 </div>
+  <div class="card" id="giftCard" style="display:none">
+    <div class="card-title">收到的礼物 🎁</div>
+    <div id="giftList"></div>
+  </div>
 </div>
 
 <!-- 商店 -->
@@ -433,6 +437,7 @@ function enterApp(){
   loadState();
   setInterval(loadState,10000);
   loadPosts();
+  renderLogs();
   showToken();
   // 拉头像
   fetch('/api/avatar',{headers:{'X-Token':getToken()}}).then(r=>r.json()).then(res=>{
@@ -511,6 +516,34 @@ function renderState(s){
     document.getElementById('workProgress').classList.remove('show');
     document.getElementById('workBtn').classList.remove('working');
   }
+  // 背包
+  const bag=s.bag||{};
+  const bagKeys=Object.keys(bag).filter(k=>bag[k]>0);
+  let bagArea=document.getElementById('bagArea');
+  if(bagKeys.length>0){
+    if(!bagArea){
+      bagArea=document.createElement('div');
+      bagArea.id='bagArea';
+      bagArea.style='margin-top:10px;padding:10px 12px;background:rgba(168,204,232,0.1);border-radius:12px;border:1px solid rgba(168,204,232,0.3)';
+      document.getElementById('workProgress').parentNode.insertBefore(bagArea,document.getElementById('workProgress'));
+    }
+    bagArea.innerHTML='<div style="font-size:11px;color:var(--navyL);margin-bottom:6px;">背包</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px;">'
+      +bagKeys.map(k=>'<div style="background:var(--milk);border:1px solid var(--blgr);border-radius:8px;padding:4px 10px;font-size:12px;">'+k+' ×'+bag[k]+'</div>').join('')
+      +'</div>';
+  }
+  // 礼物
+  const gifts=s.gifts||[];
+  const gc=document.getElementById('giftCard');
+  if(gc&&gifts.length>0){
+    gc.style.display='';
+    document.getElementById('giftList').innerHTML=gifts.slice().reverse().map(g=>
+      '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--blgr);font-size:13px;">'
+      +'<span style="font-size:24px;">'+g.emoji+'</span>'
+      +'<div><div style="font-weight:600;">'+g.name+'</div>'
+      +(g.desc?'<div style="font-size:11px;color:var(--navyL);">'+g.desc+'</div>':'')
+      +'</div></div>').join('');
+  }
 }
 
 function setStat(key,v){
@@ -559,11 +592,18 @@ function initShop(){
     +'<div class="shop-item" onclick="buyMed(\'rescue\')">'
     +'<span class="si-icon">🏥</span><div class="si-name">治疗套餐</div>'
     +'<div class="si-price">🪙 5200</div><div class="si-effect">从医院接回来</div></div>';
-  document.getElementById('giftGrid').innerHTML=
-    [{i:'💍',n:'戒指'},{i:'🧸',n:'小玩偶'},{i:'👗',n:'新衣服'}].map(g=>
-    '<div class="shop-item disabled"><span class="si-icon">'+g.i+'</span>'
-    +'<div class="si-name">'+g.n+'</div><div class="si-price">?</div>'
-    +'<div class="si-effect">即将上线</div></div>').join('');
+    const gifts=[
+    {i:'💍',n:'戒指',price:500,happy:30,desc:'永远纠缠在一起'},
+    {i:'🧸',n:'小玩偶',price:200,happy:20,desc:'陪你睡觉的替代品'},
+    {i:'👗',n:'新衣服',price:300,happy:25,desc:'专门为你挑的'},
+  ];
+  document.getElementById('giftGrid').innerHTML=gifts.map((g,i)=>
+    '<div class="shop-item" onclick="buyGift('+i+')">'
+    +'<span class="si-icon">'+g.i+'</span>'
+    +'<div class="si-name">'+g.n+'</div>'
+    +'<div class="si-price">🪙 '+g.price+'</div>'
+    +'<div class="si-effect">心情+'+g.happy+'</div></div>').join('');
+  window._shopGifts=gifts;
 }
 
 async function buyFood(idx){
@@ -576,6 +616,12 @@ async function buyMed(type){
   if(type==='rescue'){showToast('在住院卡片输入兑换码');return;}
   const res=await apiFetch('/action',{action:'buy',item:'退烧药',price:50,hunger:15,happy:0});
   showToast(res.msg,res.ok);if(res.ok){renderState(res.state);addLog(res.msg);}
+}
+async function buyGift(idx){
+  const g=window._shopGifts[idx];
+  const res=await apiFetch('/gift',{name:g.n,emoji:g.i,desc:g.desc,happy:g.happy,price:g.price});
+  showToast(res.msg,res.ok);
+  if(res.ok){renderState(res.state);addLog(res.msg);}
 }
 async function doAction(key){
   const res=await apiFetch('/action',{action:key});
@@ -668,14 +714,21 @@ async function commentPost(id){
   const res=await apiFetch('/posts/'+id+'/comment',{content});
   if(res.ok)loadPosts();
 }
+function renderLogs(){
+  if(localLogs.length===0){
+    document.getElementById('logList').innerHTML='<div class="log-item"><span class="log-text">暂无动态</span></div>';
+    return;
+  }
+  document.getElementById('logList').innerHTML=localLogs.map(l=>
+    '<div class="log-item"><span class="log-time">'+l.t+'</span><span class="log-text">'+l.text+'</span></div>').join('');
+}
 function addLog(text){
   const now=new Date();
   const t=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
   localLogs.unshift({t,text});
   if(localLogs.length>50)localLogs.pop();
   localStorage.setItem('mochi_logs',JSON.stringify(localLogs));
-  document.getElementById('logList').innerHTML=localLogs.map(l=>
-    '<div class="log-item"><span class="log-time">'+l.t+'</span><span class="log-text">'+l.text+'</span></div>').join('');
+  renderLogs();
 }
 function switchPage(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
