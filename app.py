@@ -9,7 +9,7 @@ DATA_DIR = '/root/mochi'
 STATES_DIR = DATA_DIR + '/states'
 USERS_FILE = DATA_DIR + '/users.json'
 POSTS_FILE = DATA_DIR + '/posts.json'
-ADMIN_KEY = os.environ.get('MOCHI_ADMIN_KEY', 'nixie0629')
+ADMIN_KEY = os.environ.get('MOCHI_ADMIN_KEY', '')
 
 JOBS = [
     {'name':'外卖员','income':15,'time':1800},
