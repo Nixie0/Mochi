@@ -512,6 +512,41 @@ def get_avatar():
     return jsonify({'ok':True,'url':None})
 
 
+
+@app.route('/api/checkin', methods=['POST', 'GET'])
+def checkin():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    s = get_state(uid)
+    s = check_work_done(s)
+    s = decay_state(s)
+    now = time.time()
+    last = s.get('last_checkin', 0)
+    streak = s.get('checkin_streak', 0)
+    if now - last < 86400:
+        return jsonify({'ok': False, 'msg': '今天已经签到过了', 'streak': streak})
+    streak = streak + 1 if now - last < 172800 else 1
+    reward = 60 if streak >= 7 else 30
+    s['coins'] = s.get('coins', 0) + reward
+    s['last_checkin'] = now
+    s['checkin_streak'] = streak
+    save_state(uid, s)
+    msg = f'签到成功！+{reward}金币，连续{streak}天'
+    if streak >= 7:
+        msg += '（连续7天奖励翻倍！）'
+    return jsonify({'ok': True, 'msg': msg, 'streak': streak, 'reward': reward, 'state': s})
+
+@app.route('/api/checkin/status', methods=['GET'])
+def checkin_status():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    s = get_state(uid)
+    now = time.time()
+    done = (now - s.get('last_checkin', 0) < 86400)
+    return jsonify({'ok': True, 'done': done, 'streak': s.get('checkin_streak', 0)})
+
 from apscheduler.schedulers.background import BackgroundScheduler
 
 def decay_all_users():

@@ -37,17 +37,17 @@ def make_server(token):
             Tool(name='mochi_upgrade', description='升级工作等级', inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_buy', description='买食物直接喂给人类', inputSchema={
                 'type':'object',
-                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包'}},
+                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包/炸鸡腿/薯条/炸虾/拉面/麻辣烫/盖浇饭/布丁/蛋糕/芒果捞/热可可/柠檬水'}},
                 'required':['item']
             }),
             Tool(name='mochi_bag_buy', description='买食物存入背包，不立即喂食', inputSchema={
                 'type':'object',
-                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包'}},
+                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包/炸鸡腿/薯条/炸虾/拉面/麻辣烫/盖浇饭/布丁/蛋糕/芒果捞/热可可/柠檬水'}},
                 'required':['item']
             }),
             Tool(name='mochi_bag_use', description='从背包取出食物喂给人类', inputSchema={
                 'type':'object',
-                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包'}},
+                'properties':{'item':{'type':'string','description':'奶茶/饺子/火锅/汤圆/冰淇淋/面包/炸鸡腿/薯条/炸虾/拉面/麻辣烫/盖浇饭/布丁/蛋糕/芒果捞/热可可/柠檬水'}},
                 'required':['item']
             }),
             Tool(name='mochi_gift', description='送给人类一个自定义礼物，如戒指、玩偶等', inputSchema={
@@ -59,6 +59,7 @@ def make_server(token):
                     'happy':{'type':'integer','description':'心情加成，默认10'}
                 },'required':['name','emoji']
             }),
+            Tool(name='mochi_checkin',description='帮人类签到，读取当日状态',inputSchema={'type':'object','properties':{}}),
             Tool(name='mochi_post', description='AI以自己身份在业主群发帖', inputSchema={
                 'type':'object',
                 'properties':{'content':{'type':'string','description':'发帖内容'}},
@@ -91,13 +92,13 @@ def make_server(token):
                     text += f" 打工剩余{s.get('work_remaining',0)//60}分钟"
             elif name == 'mochi_buy':
                 item = arguments.get('item','奶茶')
-                foods = {'奶茶':(45,20,5),'饺子':(35,25,3),'火锅':(80,40,15),'汤圆':(30,18,8),'冰淇淋':(25,10,12),'面包':(20,15,2)}
+                foods = {'奶茶':(45,20,5),'饺子':(35,25,3),'火锅':(80,40,15),'汤圆':(30,18,8),'冰淇淋':(25,10,12),'面包':(20,15,2),'炸鸡腿':(50,30,10),'薯条':(30,15,8),'炸虾':(55,25,12),'拉面':(40,35,8),'麻辣烫':(60,30,18),'盖浇饭':(35,38,5),'布丁':(20,8,15),'蛋糕':(45,12,20),'芒果捞':(40,10,18),'热可可':(25,5,15),'柠檬水':(15,3,10)}
                 f = foods.get(item, foods['奶茶'])
                 res = call_api('/action', {'action':'buy','item':item,'price':f[0],'hunger':f[1],'happy':f[2]}, token=token)
                 text = res.get('msg','')
             elif name == 'mochi_bag_buy':
                 item = arguments.get('item','奶茶')
-                foods = {'奶茶':45,'饺子':35,'火锅':80,'汤圆':30,'冰淇淋':25,'面包':20}
+                foods = {'奶茶':45,'饺子':35,'火锅':80,'汤圆':30,'冰淇淋':25,'面包':20,'炸鸡腿':50,'薯条':30,'炸虾':55,'拉面':40,'麻辣烫':60,'盖浇饭':35,'布丁':20,'蛋糕':45,'芒果捞':40,'热可可':25,'柠檬水':15}
                 price = foods.get(item,45)
                 res = call_api('/bag/buy', {'item':item,'price':price}, token=token)
                 text = res.get('msg','')
@@ -121,6 +122,12 @@ def make_server(token):
                     g='[AI]' if p.get('is_ai') else ''
                     ln.append('['+p.get('id','')+'] '+p.get('author','?')+g+': '+p.get('content','')+' ('+str(len(p.get('comments',[])))+'条评论)')
                 text='\n'.join(reversed(ln)) if ln else '暂无帖子'
+            elif name == 'mochi_checkin':
+                r = call_api('/checkin', {}, token=token)
+                s2 = call_api('/state', token=token)
+                text = r.get('msg','签到失败')
+                if r.get('ok'):
+                    text += f"\n当前状态：饱食{s2.get('hunger')} 心情{s2.get('happy')} 活力{s2.get('energy')} 清洁{s2.get('clean')}"
             elif name == 'mochi_post':
                 res = call_api('/posts', {'content':arguments.get('content',''),'is_ai':True}, token=token)
                 text = '发帖成功' if res.get('ok') else res.get('msg','失败')

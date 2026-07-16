@@ -256,6 +256,13 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
     </div>
   </div>
 
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;">
+    <div>
+      <div style="font-size:13px;font-weight:600;">每日签到 🗓️</div>
+      <div style="font-size:11px;color:var(--navyL);margin-top:3px;" id="checkinStatus">加载中...</div>
+    </div>
+    <button id="checkinBtn" onclick="doCheckin()" style="background:linear-gradient(90deg,var(--ice),#7AB5D8);border:none;border-radius:12px;padding:10px 18px;font-size:13px;font-weight:600;color:#fff;cursor:pointer;">签到</button>
+  </div>
   <div class="card dice-card">
     <div class="card-title">今日运势</div>
     <button class="dice-btn" onclick="rollDice()">🎲</button>
@@ -278,7 +285,7 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
     <div class="shop-grid" id="foodGrid"></div>
     <div class="shop-section-title">💊 药品</div>
     <div class="shop-grid" id="medGrid"></div>
-    <div class="shop-section-title">🎁 礼物 <span style="font-size:10px;opacity:.5">即将上线</span></div>
+    <div class="shop-section-title">🎁 礼物 </div>
     <div class="shop-grid" id="giftGrid"></div>
   </div>
 </div>
@@ -364,6 +371,17 @@ const FOODS=[
   {icon:'🍡',name:'汤圆',price:30,hunger:18,happy:8},
   {icon:'🍦',name:'冰淇淋',price:25,hunger:10,happy:12},
   {icon:'🍞',name:'面包',price:20,hunger:15,happy:2},
+  {icon:'🍗',name:'炸鸡腿',price:50,hunger:30,happy:10},
+  {icon:'🍟',name:'薯条',price:30,hunger:15,happy:8},
+  {icon:'🍤',name:'炸虾',price:55,hunger:25,happy:12},
+  {icon:'🍜',name:'拉面',price:40,hunger:35,happy:8},
+  {icon:'🥘',name:'麻辣烫',price:60,hunger:30,happy:18},
+  {icon:'🍛',name:'盖浇饭',price:35,hunger:38,happy:5},
+  {icon:'🍮',name:'布丁',price:20,hunger:8,happy:15},
+  {icon:'🍰',name:'蛋糕',price:45,hunger:12,happy:20},
+  {icon:'🥭',name:'芒果捞',price:40,hunger:10,happy:18},
+  {icon:'☕',name:'热可可',price:25,hunger:5,happy:15},
+  {icon:'🍋',name:'柠檬水',price:15,hunger:3,happy:10},
 ];
 const EVENTS=[
   {type:'good',icon:'💰',text:'捡到了一个钱包（+50金币）',ek:'coins',ed:50},
@@ -438,6 +456,7 @@ function enterApp(){
   setInterval(loadState,10000);
   loadPosts();
   renderLogs();
+  loadCheckin();
   showToken();
   // 拉头像
   fetch('/api/avatar',{headers:{'X-Token':getToken()}}).then(r=>r.json()).then(res=>{
@@ -652,6 +671,22 @@ async function sendMood(){
   if(res.ok){renderState(res.state);addLog(res.msg);}
   showToast('收到了 💌',true);
   moodDelta=0;document.getElementById('moodVal').textContent='+0';
+}
+async function doCheckin(){
+  const btn=document.getElementById('checkinBtn');
+  const res=await apiFetch('/checkin',{},'POST');
+  showToast(res.msg,res.ok);
+  if(res.ok){renderState(res.state);addLog(res.msg);
+    document.getElementById('checkinStatus').textContent='今日已签到 ✓ 连续'+res.streak+'天';
+    btn.disabled=true;btn.style.opacity='0.5';}
+}
+async function loadCheckin(){
+  const res=await apiFetch('/checkin/status',null,'GET');
+  if(!res.ok)return;
+  const el=document.getElementById('checkinStatus');
+  const btn=document.getElementById('checkinBtn');
+  if(res.done){el.textContent='今日已签到 ✓ 连续'+res.streak+'天';btn.disabled=true;btn.style.opacity='0.5';}
+  else{el.textContent=(res.streak?'连续'+res.streak+'天 | ':'')+'今日可签到 +30🪙';btn.disabled=false;btn.style.opacity='1';}
 }
 async function rollDice(){
   const e=EVENTS[Math.floor(Math.random()*EVENTS.length)];
