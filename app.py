@@ -337,6 +337,15 @@ def delete_post(post_id):
     write_json(POSTS_FILE, posts)
     return jsonify({'ok':True})
 
+
+@app.route('/api/posts/<post_id>/comments', methods=['GET'])
+def get_comments(post_id):
+    posts = read_json(POSTS_FILE, [])
+    for p in posts:
+        if p['id'] == post_id:
+            return jsonify({'ok':True,'comments':p.get('comments',[])})
+    return jsonify({'ok':False,'error':'not found'}), 404
+
 @app.route('/api/posts/<post_id>/like', methods=['POST'])
 def like_post(post_id):
     uid, user = auth()
