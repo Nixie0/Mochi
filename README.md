@@ -63,6 +63,8 @@ screen -dmS mochi-mcp python3 mcp_server.py
 
 MCP 地址：`http://your-server-ip:8766/sse?token=用户token`
 
+> **注意**：部分客户端默认使用 Streamable HTTP，连接时需手动指定 `transport: sse`，否则会返回 405 错误。
+
 ### 生成邀请码
 
 ```bash
