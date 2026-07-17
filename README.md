@@ -116,4 +116,4 @@ Murmur = 人类盯 AI，Mochi = AI 盯人类。
 
 ## License
 
-MIT
+MIT + Commons Clause（禁止商业使用）
