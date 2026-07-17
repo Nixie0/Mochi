@@ -311,6 +311,31 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
 </div>
 
 <!-- 设置 -->
+
+<!-- 幼儿园 -->
+<div class="page" id="page-school">
+  <div class="header"><div class="header-title">幼儿园 🏫</div></div>
+  <div class="content">
+    <div class="card" id="petCard" style="display:none">
+      <div class="card-title" id="petName">宠物</div>
+      <div style="font-size:48px;text-align:center;margin:12px 0" id="petEmoji">🐾</div>
+      <div style="text-align:center;color:#888;font-size:13px;margin-bottom:16px" id="petStatus">待在家里</div>
+      <div style="display:flex;gap:10px">
+        <button class="action-btn" style="flex:1" id="btnSchool" onclick="petToSchool()">送去上学</button>
+        <button class="action-btn" style="flex:1;display:none" id="btnHome" onclick="petHome()">接回家</button>
+      </div>
+      <button class="login-btn" style="margin-top:10px" id="btnEvent" onclick="triggerEvent()">触发今日剧情 🎲</button>
+    </div>
+    <div class="card" id="noPetCard">
+      <div class="card-title">还没有宠物</div>
+      <div style="color:#888;font-size:14px">告诉 AI 你想养什么，AI 帮你领养 🐾</div>
+    </div>
+    <div class="card">
+      <div class="card-title">幼儿园今日情况 📋</div>
+      <div id="schoolLog"><div style="color:#aaa;font-size:13px">加载中...</div></div>
+    </div>
+  </div>
+</div>
 <div class="page" id="page-setting">
 <div class="container">
   <div class="header"><div class="header-title">设置 ⚙️</div></div>
@@ -341,6 +366,7 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
   <div class="nav-item active" onclick="switchPage('home',this)"><span class="ni">🏠</span><span class="nl">主页</span></div>
   <div class="nav-item" onclick="switchPage('shop',this)"><span class="ni">🛒</span><span class="nl">商店</span></div>
   <div class="nav-item" onclick="switchPage('log',this)"><span class="ni">📋</span><span class="nl">动态</span></div>
+  <div class="nav-item" onclick="switchPage('school',this)"><span class="ni">🏫</span><span class="nl">幼儿园</span></div>
   <div class="nav-item" onclick="switchPage('setting',this)"><span class="ni">⚙️</span><span class="nl">设置</span></div>
 </nav>
 
@@ -785,12 +811,60 @@ function addLog(text){
   localStorage.setItem('mochi_logs',JSON.stringify(localLogs));
   loadLog();
 }
+
+async function loadSchoolPage(){
+  const res=await apiFetch('/state',null,'GET');
+  if(!res||res.hunger===undefined)return;
+  const pet=res.pet;
+  if(pet){
+    document.getElementById('petCard').style.display='';
+    document.getElementById('noPetCard').style.display='none';
+    document.getElementById('petName').textContent=pet.emoji+' '+pet.name;
+    document.getElementById('petEmoji').textContent=pet.emoji;
+    const at=pet.at_school;
+    document.getElementById('petStatus').textContent=at?'正在上学 🏫':'待在家里 🏠';
+    document.getElementById('btnSchool').style.display=at?'none':'';
+    document.getElementById('btnHome').style.display=at?'':'none';
+  }else{
+    document.getElementById('petCard').style.display='none';
+    document.getElementById('noPetCard').style.display='';
+  }
+  loadSchoolLog();
+}
+async function petToSchool(){
+  const res=await apiFetch('/pet/school',{_:1});
+  showToast(res.msg||'失败',res.ok);
+  if(res.ok)loadSchoolPage();
+}
+async function petHome(){
+  const res=await apiFetch('/pet/home',{_:1});
+  showToast(res.msg||'失败',res.ok);
+  if(res.ok)loadSchoolPage();
+}
+async function triggerEvent(){
+  const btn=document.getElementById('btnEvent');
+  btn.disabled=true;
+  const res=await apiFetch('/pet/school_event',{_:1});
+  if(res.ok){showToast(res.story,true);loadSchoolLog();}
+  else{showToast(res.msg||'失败');}
+  btn.disabled=false;
+}
+async function loadSchoolLog(){
+  const res=await apiFetch('/school_log',null,'GET');
+  const el=document.getElementById('schoolLog');
+  if(!res||!res.logs||res.logs.length===0){
+    el.innerHTML='<div style="color:#aaa;font-size:13px;text-align:center;padding:16px">暂时还没有故事</div>';
+    return;
+  }
+  el.innerHTML=res.logs.map(l=>'<div style="padding:10px 0;border-bottom:1px solid var(--blgr)"><div style="font-size:12px;color:#aaa;margin-bottom:4px">'+l.time+' · '+l.pet+'</div><div style="font-size:13px;line-height:1.6">'+l.story+'</div></div>').join('');
+}
 function switchPage(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   el.classList.add('active');
   if(name==='log'){loadPosts();loadLog();}
+  if(name==='school'){loadSchoolPage();}
 }
 function showToast(msg,normal=false){
   const t=document.getElementById('toast');

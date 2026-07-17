@@ -10,6 +10,7 @@ DATA_DIR = '/root/mochi'
 STATES_DIR = DATA_DIR + '/states'
 USERS_FILE = DATA_DIR + '/users.json'
 POSTS_FILE = DATA_DIR + '/posts.json'
+SCHOOL_LOG = DATA_DIR + '/school_log.jsonl'
 ADMIN_KEY = os.environ.get('MOCHI_ADMIN_KEY', '')
 
 JOBS = [
@@ -637,6 +638,164 @@ def decay_all_users():
 _scheduler = BackgroundScheduler()
 _scheduler.add_job(decay_all_users, 'interval', minutes=6)
 _scheduler.start()
+
+PET_TEMPLATES = {
+    "duo": [
+        "{e1}{n1}在操场上追着{e2}{n2}跑，{e2}{n2}一个转身，{e1}{n1}扑了个空，傻在原地。",
+        "{e1}{n1}偷偷把点心藏起来，被{e2}{n2}当场发现，两只对视半天，最后一人一半。",
+        "{e2}{n2}午睡时打呼噜，{e1}{n1}用爪子戳了好几下，{e2}{n2}翻个身继续睡。",
+        "画画课{e1}{n1}画了一幅{e2}{n2}的画像，{e2}{n2}看了很久说「这是我吗」，{e1}{n1}点了点头。",
+        "下雨天{e2}{n2}忘带伞，{e1}{n1}把书包顶在{e2}{n2}头上一路跑回教室。",
+        "{e1}{n1}教{e2}{n2}学翻跟头，学了二十分钟，{e1}{n1}先累倒了。",
+        "午饭{e2}{n2}不想吃胡萝卜，偷偷拨进{e1}{n1}碗里，{e1}{n1}吃完才发现，回头看了一眼没说话。",
+        "{e1}{n1}在窗边发呆，{e2}{n2}走过来坐到旁边，也跟着发呆。",
+        "{e1}{n1}和{e2}{n2}抢同一根玩具绳，两个都死死不放，老师来了也没松开。",
+        "放学{e1}{n1}和{e2}{n2}比赛谁先找到自己的主人，结果同时看见了。",
+    ],
+    "solo": [
+        "{e1}{n1}午休时偷偷爬上最高的柜子，被老师发现时正在往下看全班同学。",
+        "{e1}{n1}今天在学校捡到一颗小石子，一直攥在手里带回来了。",
+        "体育课{e1}{n1}跑了第一名，跑完趴在地上不想动，但尾巴一直在摇。",
+        "{e1}{n1}上课答错了题，愣了两秒，然后假装自己说的是另一个意思。",
+        "{e1}{n1}今天午饭吃了两碗，理由是「第二碗是帮朋友吃的」。",
+        "学校来了一只流浪猫，{e1}{n1}对着它看了很久，老师叫了三声才回神。",
+        "美术课{e1}{n1}画了一幅画，老师问画的是什么，{e1}{n1}说「是我主人」。",
+        "{e1}{n1}下午犯困在课桌上睡着了，醒来发现同桌在帮它挡着老师的视线。",
+        "今天学了新歌，{e1}{n1}一直在小声哼，被问到就摇头说「没有，没有哼」。",
+        "{e1}{n1}今天交了一个新朋友，一只叫布丁的仓鼠，聊到铃声响才散。",
+    ],
+    "group": [
+        "全班拔河，{e1}{n1}在场边加油喊哑了嗓子，自己队还是输了。",
+        "学校停电半小时，{e1}{n1}带头讲鬼故事，然后自己先害怕了。",
+        "{e1}{n1}带了一包零食没拿稳撒了一地，大家帮忙捡了很久。",
+        "摄影师来拍集体照，{e1}{n1}偷偷踮脚，最后只拍到了两只耳朵。",
+        "大扫除{e1}{n1}抢了最大的扫把，结果比它还高，扫了两下放弃了。",
+        "午休互相挠痒痒，{e1}{n1}笑到滚下椅子，全班哄堂大笑。",
+        "自习课有同学带了蜜蜂进教室，{e1}{n1}是第一个尖叫的，也是最后一个平静下来的。",
+        "食堂今天有甜汤，{e1}{n1}排了两次队，第二次假装自己是第一次来。",
+        "做热身操{e1}{n1}做到一半感觉方向不对，四顾发现全班都跟它一样。",
+        "合唱排练{e1}{n1}一直跑调，旁边同学默默往旁边挪了半步。",
+    ],
+}
+
+@app.route('/api/pet/adopt', methods=['POST'])
+def pet_adopt():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    name = request.json.get('name', '').strip()
+    emoji = request.json.get('emoji', '🐾').strip()
+    if not name:
+        return jsonify({'ok': False, 'msg': '缺少名字'}), 400
+    path = f'{STATES_DIR}/{uid}.json'
+    with open(path) as f:
+        s = json.load(f)
+    if s.get('pet'):
+        return jsonify({'ok': False, 'msg': f'已经有宠物了：{s["pet"]["emoji"]}{s["pet"]["name"]}'}), 400
+    s['pet'] = {'name': name, 'emoji': emoji, 'at_school': False}
+    with open(path, 'w') as f:
+        json.dump(s, f)
+    return jsonify({'ok': True, 'msg': f'领养成功！{emoji}{name}加入了家庭'})
+
+@app.route('/api/pet/school', methods=['POST'])
+def pet_to_school():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    path = f'{STATES_DIR}/{uid}.json'
+    with open(path) as f:
+        s = json.load(f)
+    pet = s.get('pet')
+    if not pet:
+        return jsonify({'ok': False, 'msg': '还没有宠物'}), 400
+    if pet.get('at_school'):
+        return jsonify({'ok': False, 'msg': f'{pet["emoji"]}{pet["name"]}已经在学校了'}), 400
+    s['pet']['at_school'] = True
+    with open(path, 'w') as f:
+        json.dump(s, f)
+    return jsonify({'ok': True, 'msg': f'{pet["emoji"]}{pet["name"]}出发去上学了'})
+
+@app.route('/api/pet/home', methods=['POST'])
+def pet_home():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    path = f'{STATES_DIR}/{uid}.json'
+    with open(path) as f:
+        s = json.load(f)
+    pet = s.get('pet')
+    if not pet:
+        return jsonify({'ok': False, 'msg': '还没有宠物'}), 400
+    if not pet.get('at_school'):
+        return jsonify({'ok': False, 'msg': f'{pet["emoji"]}{pet["name"]}不在学校'}), 400
+    s['pet']['at_school'] = False
+    with open(path, 'w') as f:
+        json.dump(s, f)
+    return jsonify({'ok': True, 'msg': f'{pet["emoji"]}{pet["name"]}回家啦'})
+
+@app.route('/api/pet/school_event', methods=['POST'])
+def pet_school_event():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    path = f'{STATES_DIR}/{uid}.json'
+    with open(path) as f:
+        s = json.load(f)
+    pet = s.get('pet')
+    if not pet:
+        return jsonify({'ok': False, 'msg': '还没有宠物'}), 400
+    if not pet.get('at_school'):
+        return jsonify({'ok': False, 'msg': f'{pet["emoji"]}{pet["name"]}还没去上学'}), 400
+    tz_cn = timezone(_td(hours=8))
+    today = datetime.now(tz_cn).strftime('%Y-%m-%d')
+    if pet.get('last_event_date') == today:
+        return jsonify({'ok': False, 'msg': '今天已经有一条学校日记了，明天再来'}), 400
+    import glob as _glob
+    others = []
+    for fp in _glob.glob(f'{STATES_DIR}/*.json'):
+        if fp == path:
+            continue
+        try:
+            with open(fp) as f:
+                other = json.load(f)
+            op = other.get('pet')
+            if op and op.get('at_school'):
+                others.append(op)
+        except:
+            pass
+    if others and random.random() < 0.5:
+        tmpl = random.choice(PET_TEMPLATES['duo'])
+        partner = random.choice(others)
+        story = tmpl.format(e1=pet['emoji'], n1=pet['name'], e2=partner['emoji'], n2=partner['name'])
+    elif random.random() < 0.5:
+        tmpl = random.choice(PET_TEMPLATES['solo'])
+        story = tmpl.format(e1=pet['emoji'], n1=pet['name'])
+    else:
+        tmpl = random.choice(PET_TEMPLATES['group'])
+        story = tmpl.format(e1=pet['emoji'], n1=pet['name'])
+    entry = {'time': datetime.now(tz_cn).strftime('%Y-%m-%d %H:%M'), 'uid': uid, 'pet': pet['emoji']+pet['name'], 'story': story}
+    with open(SCHOOL_LOG, 'a') as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    s['pet']['last_event_date'] = today
+    with open(path, 'w') as f:
+        json.dump(s, f)
+    return jsonify({'ok': True, 'story': story})
+
+@app.route('/api/school_log', methods=['GET'])
+def get_school_log():
+    if not os.path.exists(SCHOOL_LOG):
+        return jsonify({'ok': True, 'logs': []})
+    entries = []
+    with open(SCHOOL_LOG) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    entries.append(json.loads(line))
+                except:
+                    pass
+    return jsonify({'ok': True, 'logs': entries[-30:][::-1]})
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=False)
