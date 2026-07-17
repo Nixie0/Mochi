@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, render_template, g
 from flask_cors import CORS
 import json, os, time, random, string, hashlib
+from datetime import datetime, timezone, timedelta as _td
 
 app = Flask(__name__)
 CORS(app)
@@ -27,6 +28,14 @@ DEFAULT_STATE = {
     "locked":False,"rescue_code":"","working":False,"work_end_time":None,"bag":{},"gifts":[]
 }
 DEFAULT_CONFIG = {"human_name":"用户","call_name":"老公"}
+
+
+def add_log(s, text):
+    log = s.get('activity_log', [])
+    log.append({'time': int(time.time()), 'text': text})
+    if len(log) > 100:
+        log = log[-100:]
+    s['activity_log'] = log
 
 def read_json(path, default=None):
     try:
@@ -88,6 +97,7 @@ def check_work_done(s):
             s['coins'] = s.get('coins',0) + job['income']
             s['working'] = False
             s['work_end_time'] = None
+            add_log(s, f"+{job['income']}🪙 打工收入（{job['name']}）")
     return s
 
 def auth():
@@ -143,7 +153,7 @@ def login():
     users = read_json(USERS_FILE, {})
     for uid, u in users.items():
         if u['username'] == username and u['password'] == hash_pw(password):
-            return jsonify({'ok':True,'token':u['token'],'uid':uid,'human_name':u.get('human_name','用户'),'call_name':u.get('call_name','老公')})
+            return jsonify({'ok':True,'token':u['token'],'uid':uid,'human_name':u.get('human_name','用户'),'call_name':u.get('call_name','老公'),'is_admin':u.get('is_admin',False)})
     return jsonify({'ok':False,'msg':'用户名或密码错误'})
 
 @app.route('/api/settings', methods=['POST'])
@@ -201,6 +211,7 @@ def action():
         s['working'] = True
         s['work_end_time'] = time.time() + job['time']
         msg = f"{cn}开始打工（{job['name']}），{job['time']//60}分钟后收工"
+        add_log(s, f'💼 开始打工（{job["name"]}），{job["time"]//60}分钟后收工')
     elif act == 'upgrade':
         lv = s.get('job_level',0)
         if lv >= 4:
@@ -211,26 +222,32 @@ def action():
         s['coins'] -= cost
         s['job_level'] = lv + 1
         msg = f"升级成功！现在是{JOBS[s['job_level']]['name']}"
+        add_log(s, f"-{cost}🪙 升级→{JOBS[s['job_level']]['name']}")
     elif act == 'feed':
         foods = [('奶茶',20,5),('饺子',25,3),('火锅',40,15),('汤圆',18,8),('冰淇淋',10,12),('面包',15,2)]
         f = random.choice(foods)
         s['hunger'] = clamp(s.get('hunger',50)+f[1])
         s['happy'] = clamp(s.get('happy',50)+f[2])
         msg = f"{cn}喂了{f[0]}，饱食+{f[1]}"
+        add_log(s, f'🍡 喂了{f[0]}')
     elif act == 'pat':
         s['happy'] = clamp(s.get('happy',50)+10)
         msg = f"{cn}抚摸了{hn}，心情+10"
+        add_log(s, '🤍 被抚摸了，心情+10')
     elif act == 'play':
         s['happy'] = clamp(s.get('happy',50)+12)
         s['energy'] = clamp(s.get('energy',50)-8)
         s['hunger'] = clamp(s.get('hunger',50)-5)
         msg = f"{cn}带{hn}出去溜达"
+        add_log(s, '🎈 出去溜达了')
     elif act == 'bath':
         s['clean'] = clamp(s.get('clean',50)+35)
         msg = f"{cn}帮{hn}洗澡，清洁度大涨"
+        add_log(s, '🛁 洗澡了，清洁度大涨')
     elif act == 'sleep':
         s['energy'] = clamp(s.get('energy',50)+20)
         msg = f"{cn}哄{hn}睡觉，活力+20"
+        add_log(s, '🌙 睡觉了，活力+20')
     elif act == 'buy':
         item = data.get('item')
         price = data.get('price',0)
@@ -242,6 +259,7 @@ def action():
         s['hunger'] = clamp(s.get('hunger',50)+hunger)
         s['happy'] = clamp(s.get('happy',50)+happy)
         msg = f"{cn}买了{item}，饱食+{hunger}"
+        add_log(s, f"-{price}🪙 买了{item}")
     elif act == 'mood':
         delta = int(data.get('delta',0))
         s['happy'] = clamp(s.get('happy',50)+delta)
@@ -260,7 +278,9 @@ def action():
                     s[k] = clamp(s.get(k,50)+int(data[k]))
         elif key in s:
             s[key] = clamp(s.get(key,50)+delta)
+        event_text = data.get('text', '随机事件')
         msg = '随机事件触发'
+        add_log(s, f'🎲 {event_text}')
     elif act == 'release':
         code = data.get('code','').upper()
         if code != s.get('rescue_code',''):
@@ -406,6 +426,7 @@ def bag_buy():
     save_state(uid, s)
     hn = user.get('human_name','用户')
     cn = user.get('call_name','老公')
+    add_log(s, f'-{price}🪙 背包存入{item}')
     return jsonify({'ok':True,'msg':f'{cn}买了{item}存入背包','state':s})
 
 @app.route('/api/bag/use', methods=['POST'])
@@ -428,6 +449,7 @@ def bag_use():
         h,hp = foods_map[item]
         s['hunger'] = clamp(s.get('hunger',50)+h)
         s['happy'] = clamp(s.get('happy',50)+hp)
+    add_log(s, f'🍱 从背包喂了{item}')
     save_state(uid, s)
     hn = user.get('human_name','用户')
     cn = user.get('call_name','老公')
@@ -456,10 +478,22 @@ def send_gift():
         gifts = gifts[-20:]
     s['gifts'] = gifts
     s['happy'] = clamp(s.get('happy',50)+happy)
+    add_log(s, f'🎁 收到礼物：{emoji}{name}')
+    add_log(s, f'🎁 收到礼物：{emoji}{name}')
     save_state(uid, s)
     hn = user.get('human_name','用户')
     cn = user.get('call_name','老公')
     return jsonify({'ok':True,'msg':f'{cn}送给{hn}一个{emoji}{name}，心情+{happy}','state':s})
+
+
+@app.route('/api/log')
+def get_log():
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False}), 401
+    s = get_state(uid)
+    log = list(reversed(s.get('activity_log', [])))
+    return jsonify({'ok': True, 'log': log[:50]})
 
 @app.route('/api/admin/invite', methods=['GET'])
 def gen_invite():
@@ -524,15 +558,20 @@ def checkin():
     now = time.time()
     last = s.get('last_checkin', 0)
     streak = s.get('checkin_streak', 0)
-    if now - last < 86400:
+    _bj = timezone(_td(hours=8))
+    _today = datetime.now(tz=_bj).date()
+    _last_date = datetime.fromtimestamp(last, tz=_bj).date() if last else None
+    if _last_date == _today:
         return jsonify({'ok': False, 'msg': '今天已经签到过了', 'streak': streak})
-    streak = streak + 1 if now - last < 172800 else 1
+    _yesterday = _today - _td(days=1)
+    streak = streak + 1 if _last_date == _yesterday else 1
     reward = 60 if streak >= 7 else 30
     s['coins'] = s.get('coins', 0) + reward
     s['last_checkin'] = now
     s['checkin_streak'] = streak
     save_state(uid, s)
     msg = f'签到成功！+{reward}金币，连续{streak}天'
+    add_log(s, f'+{reward}🪙 签到（连续{streak}天）')
     if streak >= 7:
         msg += '（连续7天奖励翻倍！）'
     return jsonify({'ok': True, 'msg': msg, 'streak': streak, 'reward': reward, 'state': s})
@@ -544,8 +583,34 @@ def checkin_status():
         return jsonify({'ok': False, 'msg': '未登录'}), 401
     s = get_state(uid)
     now = time.time()
-    done = (now - s.get('last_checkin', 0) < 86400)
+    _bj = timezone(_td(hours=8))
+    _today = datetime.now(tz=_bj).date()
+    _last_ts = s.get('last_checkin', 0)
+    _last_date = datetime.fromtimestamp(_last_ts, tz=_bj).date() if _last_ts else None
+    done = (_last_date == _today)
     return jsonify({'ok': True, 'done': done, 'streak': s.get('checkin_streak', 0)})
+
+
+@app.route('/api/posts/<post_id>/comments', methods=['DELETE'])
+def delete_comment(post_id):
+    uid, user = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': '未登录'}), 401
+    users = read_json(USERS_FILE, {})
+    if not users.get(uid, {}).get('is_admin'):
+        return jsonify({'ok': False, 'msg': '无权限'}), 403
+    data = request.json or {}
+    comment_uid = data.get('uid')
+    comment_time = data.get('time')
+    posts = read_json(POSTS_FILE, [])
+    for post in posts:
+        if post['id'] == post_id:
+            before = len(post.get('comments', []))
+            post['comments'] = [c for c in post.get('comments', [])
+                if not (c.get('uid') == comment_uid and c.get('time') == comment_time)]
+            write_json(POSTS_FILE, posts)
+            return jsonify({'ok': True, 'deleted': before - len(post['comments'])})
+    return jsonify({'ok': False, 'msg': '帖子不存在'})
 
 from apscheduler.schedulers.background import BackgroundScheduler
 

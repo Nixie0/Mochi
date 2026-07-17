@@ -330,7 +330,7 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
   <div style="display:flex;gap:8px;width:100%;">
     <div id="tokenDisplay" style="flex:1;background:var(--milk);border:1.5px solid var(--blgr);border-radius:8px;padding:6px 10px;font-size:11px;color:var(--navyL);font-family:monospace;word-break:break-all;"></div>
   </div>
-  <div style="font-size:10px;color:var(--navyL);">填入 Kelivo MCP 配置，服务地址：http://mochi.nixielab.tech/sse?token=密钥</div>
+  <div style="font-size:10px;color:var(--navyL);">填入 Kelivo MCP 配置，服务地址：https://mochi.nixielab.tech/sse?token=密钥</div>
 </div>
     <button class="logout-btn" onclick="logout()">退出登录</button>
   </div>
@@ -399,14 +399,14 @@ const EVENTS=[
   {type:'neutral',icon:'📱',text:'刷了两个小时手机，时间过得好快',ek:null},
 ];
 
-let token=null,CONFIG={name:'--',call:'--'},moodDelta=0,workInterval=null,localLogs=[];
+let token=null,CONFIG={name:'--',call:'--'},moodDelta=0,workInterval=null,localLogs=[],isAdmin=false;
 let isLogin=true;
 
 function getToken(){return localStorage.getItem('mochi_token');}
 function setToken(t){localStorage.setItem('mochi_token',t);}
 
 async function apiFetch(path,body=null,method='POST'){
-  const opts={method:(body?'POST':method),headers:{'X-Token':getToken()}};
+  const opts={method:method,headers:{'X-Token':getToken()}};
   if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
   try{
     const r=await fetch('/api'+path,opts);
@@ -429,7 +429,7 @@ async function submitAuth(){
     const res=await apiFetch('/login',{username,password});
     if(res.ok){
       setToken(res.token);
-      CONFIG.name=res.human_name;CONFIG.call=res.call_name;
+      CONFIG.name=res.human_name;CONFIG.call=res.call_name;isAdmin=res.is_admin||false;localStorage.setItem('mochi_is_admin',isAdmin?'1':'0');
       enterApp();
     }else showToast(res.msg||'登录失败');
   }else{
@@ -440,13 +440,14 @@ async function submitAuth(){
     const res=await apiFetch('/register',{username,password,invite_code:invite,human_name,call_name});
     if(res.ok){
       setToken(res.token);
-      CONFIG.name=res.human_name;CONFIG.call=res.call_name;
+      CONFIG.name=res.human_name;CONFIG.call=res.call_name;isAdmin=res.is_admin||false;localStorage.setItem('mochi_is_admin',isAdmin?'1':'0');
       enterApp();
     }else showToast(res.msg||'注册失败');
   }
 }
 
 function enterApp(){
+  isAdmin=localStorage.getItem('mochi_is_admin')==='1';
   const saved=localStorage.getItem('mochi_logs');
   if(saved)localLogs=JSON.parse(saved);
   document.getElementById('authWrap').style.display='none';
@@ -455,7 +456,7 @@ function enterApp(){
   loadState();
   setInterval(loadState,10000);
   loadPosts();
-  renderLogs();
+  loadLog();
   loadCheckin();
   showToken();
   // 拉头像
@@ -694,8 +695,8 @@ async function rollDice(){
   document.getElementById('diceResult').className='dice-result show '+e.type;
   if(e.ek){
     const body=e.ek==='multi'
-      ?{action:'event',key:'multi',happy:e.happy||0,clean:e.clean||0}
-      :{action:'event',key:e.ek,delta:e.ed};
+      ?{action:'event',key:'multi',happy:e.happy||0,clean:e.clean||0,text:e.text}
+      :{action:'event',key:e.ek,delta:e.ed,text:e.text};
     const res=await apiFetch('/action',body);
     if(res.ok)renderState(res.state);
   }
@@ -713,7 +714,7 @@ function renderPosts(posts){
   list.innerHTML=posts.slice().reverse().map(p=>{
     const t=new Date(p.time*1000);
     const timeStr=t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0');
-    const comments=p.comments.map(c=>'<div class="comment-item"><span class="comment-author">'+c.author+'</span>：'+c.content+'</div>').join('');
+    const comments=p.comments.map(c=>'<div class="comment-item"><span class="comment-author">'+c.author+'</span>：'+c.content+(isAdmin?'<button onclick="deleteComment(\''+p.id+'\',\''+c.uid+'\','+c.time+')" style="float:right;background:none;border:none;color:#e88;cursor:pointer;font-size:12px;padding:0">✕</button>':'')+'</div>').join('');
     return '<div class="post-item">'
       +'<div class="post-header"><span class="post-author'+(p.is_ai?' is-ai':'')+'">'+p.author+(p.is_ai?' 🤖':'')+'</span><span class="post-time">'+timeStr+'</span></div>'
       +'<div class="post-content">'+p.content+'</div>'
@@ -743,11 +744,30 @@ async function likePost(id){
   const res=await apiFetch('/posts/'+id+'/like',{});
   if(res.ok)loadPosts();
 }
+async function deleteComment(postId,uid,time){
+  if(!confirm('确定删除这条评论？'))return;
+  const res=await apiFetch('/posts/'+postId+'/comments',{uid,time},'DELETE');
+  if(res.ok){showToast('已删除');loadPosts();}
+  else showToast(res.msg||'删除失败');
+}
 async function commentPost(id){
   const content=prompt('发表评论：');
   if(!content)return;
   const res=await apiFetch('/posts/'+id+'/comment',{content});
   if(res.ok)loadPosts();
+}
+async function loadLog(){
+  const res=await apiFetch('/log',null,'GET');
+  const logList=document.getElementById('logList');
+  if(!res.ok||!res.log||!res.log.length){
+    renderLogs();
+    return;
+  }
+  logList.innerHTML=res.log.map(l=>{
+    const t=new Date(l.time*1000);
+    const ts=t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0');
+    return '<div class="log-item"><span class="log-time">'+ts+'</span><span class="log-text">'+l.text+'</span></div>';
+  }).join('');
 }
 function renderLogs(){
   if(localLogs.length===0){
@@ -763,14 +783,14 @@ function addLog(text){
   localLogs.unshift({t,text});
   if(localLogs.length>50)localLogs.pop();
   localStorage.setItem('mochi_logs',JSON.stringify(localLogs));
-  renderLogs();
+  loadLog();
 }
 function switchPage(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   el.classList.add('active');
-  if(name==='log')loadPosts();
+  if(name==='log'){loadPosts();loadLog();}
 }
 function showToast(msg,normal=false){
   const t=document.getElementById('toast');
