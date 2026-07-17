@@ -13,13 +13,13 @@ POSTS_FILE = DATA_DIR + '/posts.json'
 ADMIN_KEY = os.environ.get('MOCHI_ADMIN_KEY', '')
 
 JOBS = [
-    {'name':'外卖员','income':15,'time':1800},
-    {'name':'便利店员','income':22,'time':1500},
-    {'name':'程序员','income':35,'time':1200},
-    {'name':'产品经理','income':50,'time':900},
-    {'name':'CEO','income':60,'time':600},
+    {'name':'外卖员','income':30,'time':1200},
+    {'name':'便利店员','income':50,'time':1200},
+    {'name':'程序员','income':85,'time':900},
+    {'name':'产品经理','income':150,'time':900},
+    {'name':'CEO','income':200,'time':600},
 ]
-UPGRADE_COSTS = [200, 500, 1200, 2500]
+UPGRADE_COSTS = [200, 600, 1500, 3500]
 INTERACT = ['feed','pat','play','bath','sleep']
 
 DEFAULT_STATE = {
