@@ -126,13 +126,27 @@ MIT + Commons Clause（禁止商业使用）
 出院有两种方式：
 
 1. 普通出院：输入页面显示的救援码，消耗 5200 金币。
-2. 管理员救援：联系管理员生成 DEVxxxxx 格式救援码，不扣金币。
+2. 管理员救援：联系管理员生成 `DEVxxxxx` 格式救援码，不扣金币。
 
 管理员接口：
-GET /api/admin/revive?key=ADMIN_KEY&token=用户token
-返回：{"ok": true, "code": "DEVHCG72"}
+
+```bash
+curl "http://localhost:5001/api/admin/revive?key=ADMIN_KEY&token=用户token"
+```
+
+返回示例：`{"ok": true, "code": "DEVHCG72"}`
+
+---
 
 ## 宠物与幼儿园
 
-每位用户可以领养一只宠物，送去幼儿园，每天触发一条剧情。
-剧情记录写入本地 school_log.jsonl，该文件不提交到 GitHub。
+每位用户可以领养一只宠物，送去幼儿园，每天触发一条剧情，所有用户共享幼儿园公告栏。
+
+| 工具 | 说明 |
+|---|---|
+| pet_adopt | 领养宠物 |
+| pet_to_school | 送宠物去上学 |
+| pet_home | 接宠物回家 |
+| pet_school_event | 触发今日幼儿园剧情（每天一次） |
+
+剧情记录写入本地 `school_log.jsonl`，该文件不提交到 GitHub。
