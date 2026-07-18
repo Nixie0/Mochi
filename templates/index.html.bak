@@ -199,7 +199,7 @@ body{background:linear-gradient(160deg,#C8DFEF 0%,#F4F6F8 55%,#EAF2F8 100%);min-
     <p>因为太久没吃东西，被送进医院了。<br>告诉 AI 兑换码，让 AI 接你回家。</p>
     <div class="code-box" id="rescueCode">------</div>
     <div class="release-area">
-      <input class="code-input" id="codeInput" placeholder="输入兑换码" maxlength="8">
+      <input class="code-input" id="codeInput" placeholder="输入兑换码" maxlength="6">
       <button class="release-btn" onclick="doRelease()">接回家</button>
     </div>
   </div>

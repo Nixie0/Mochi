@@ -295,10 +295,10 @@ def action():
         s['locked'] = False
         s['rescue_code'] = ''
         s['hunger'] = clamp(s.get('hunger',0)+30)
-        msg = f'{cn}把{hn}接回家了（管理员救援）' if is_dev else f'{cn}花5200金币把{hn}接回家了'
+        msg = f'{cn}花5200金币把{hn}接回家了'
 
     if s.get('hunger',50) <= 0 and not s.get('hospitalized'):
-        code = 'DEV' + ''.join(random.choices(string.ascii_uppercase+string.digits, k=5))
+        code = ''.join(random.choices(string.ascii_uppercase+string.digits, k=6))
         s['hospitalized'] = True
         s['locked'] = True
         s['rescue_code'] = code
@@ -513,7 +513,7 @@ def admin_revive():
     uid, user = auth()
     if not uid:
         return jsonify({'ok':False,'msg':'需要token'})
-    code = 'DEV' + ''.join(random.choices(string.ascii_uppercase+string.digits, k=5))
+    code = ''.join(random.choices(string.ascii_uppercase+string.digits, k=6))
     s = get_state(uid)
     s['rescue_code'] = code
     s['hospitalized'] = True

@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request, render_template, g
 from flask_cors import CORS
 import json, os, time, random, string, hashlib
-from datetime import datetime, timezone, timedelta as _td
 
 app = Flask(__name__)
 CORS(app)
@@ -10,17 +9,16 @@ DATA_DIR = '/root/mochi'
 STATES_DIR = DATA_DIR + '/states'
 USERS_FILE = DATA_DIR + '/users.json'
 POSTS_FILE = DATA_DIR + '/posts.json'
-SCHOOL_LOG = DATA_DIR + '/school_log.jsonl'
 ADMIN_KEY = os.environ.get('MOCHI_ADMIN_KEY', '')
 
 JOBS = [
-    {'name':'外卖员','income':30,'time':1200},
-    {'name':'便利店员','income':50,'time':1200},
-    {'name':'程序员','income':85,'time':900},
-    {'name':'产品经理','income':150,'time':900},
-    {'name':'CEO','income':200,'time':600},
+    {'name':'外卖员','income':15,'time':1800},
+    {'name':'便利店员','income':22,'time':1500},
+    {'name':'程序员','income':35,'time':1200},
+    {'name':'产品经理','income':50,'time':900},
+    {'name':'CEO','income':60,'time':600},
 ]
-UPGRADE_COSTS = [200, 600, 1500, 3500]
+UPGRADE_COSTS = [200, 500, 1200, 2500]
 INTERACT = ['feed','pat','play','bath','sleep']
 
 DEFAULT_STATE = {
@@ -154,7 +152,7 @@ def login():
     users = read_json(USERS_FILE, {})
     for uid, u in users.items():
         if u['username'] == username and u['password'] == hash_pw(password):
-            return jsonify({'ok':True,'token':u['token'],'uid':uid,'human_name':u.get('human_name','用户'),'call_name':u.get('call_name','老公'),'is_admin':u.get('is_admin',False)})
+            return jsonify({'ok':True,'token':u['token'],'uid':uid,'human_name':u.get('human_name','用户'),'call_name':u.get('call_name','老公')})
     return jsonify({'ok':False,'msg':'用户名或密码错误'})
 
 @app.route('/api/settings', methods=['POST'])
@@ -295,10 +293,10 @@ def action():
         s['locked'] = False
         s['rescue_code'] = ''
         s['hunger'] = clamp(s.get('hunger',0)+30)
-        msg = f'{cn}把{hn}接回家了（管理员救援）' if is_dev else f'{cn}花5200金币把{hn}接回家了'
+        msg = f'{cn}花5200金币把{hn}接回家了'
 
     if s.get('hunger',50) <= 0 and not s.get('hospitalized'):
-        code = 'DEV' + ''.join(random.choices(string.ascii_uppercase+string.digits, k=5))
+        code = ''.join(random.choices(string.ascii_uppercase+string.digits, k=6))
         s['hospitalized'] = True
         s['locked'] = True
         s['rescue_code'] = code
@@ -513,7 +511,7 @@ def admin_revive():
     uid, user = auth()
     if not uid:
         return jsonify({'ok':False,'msg':'需要token'})
-    code = 'DEV' + ''.join(random.choices(string.ascii_uppercase+string.digits, k=5))
+    code = ''.join(random.choices(string.ascii_uppercase+string.digits, k=6))
     s = get_state(uid)
     s['rescue_code'] = code
     s['hospitalized'] = True
@@ -559,13 +557,9 @@ def checkin():
     now = time.time()
     last = s.get('last_checkin', 0)
     streak = s.get('checkin_streak', 0)
-    _bj = timezone(_td(hours=8))
-    _today = datetime.now(tz=_bj).date()
-    _last_date = datetime.fromtimestamp(last, tz=_bj).date() if last else None
-    if _last_date == _today:
+    if now - last < 86400:
         return jsonify({'ok': False, 'msg': '今天已经签到过了', 'streak': streak})
-    _yesterday = _today - _td(days=1)
-    streak = streak + 1 if _last_date == _yesterday else 1
+    streak = streak + 1 if now - last < 172800 else 1
     reward = 60 if streak >= 7 else 30
     s['coins'] = s.get('coins', 0) + reward
     s['last_checkin'] = now
@@ -584,34 +578,8 @@ def checkin_status():
         return jsonify({'ok': False, 'msg': '未登录'}), 401
     s = get_state(uid)
     now = time.time()
-    _bj = timezone(_td(hours=8))
-    _today = datetime.now(tz=_bj).date()
-    _last_ts = s.get('last_checkin', 0)
-    _last_date = datetime.fromtimestamp(_last_ts, tz=_bj).date() if _last_ts else None
-    done = (_last_date == _today)
+    done = (now - s.get('last_checkin', 0) < 86400)
     return jsonify({'ok': True, 'done': done, 'streak': s.get('checkin_streak', 0)})
-
-
-@app.route('/api/posts/<post_id>/comments', methods=['DELETE'])
-def delete_comment(post_id):
-    uid, user = auth()
-    if not uid:
-        return jsonify({'ok': False, 'msg': '未登录'}), 401
-    users = read_json(USERS_FILE, {})
-    if not users.get(uid, {}).get('is_admin'):
-        return jsonify({'ok': False, 'msg': '无权限'}), 403
-    data = request.json or {}
-    comment_uid = data.get('uid')
-    comment_time = data.get('time')
-    posts = read_json(POSTS_FILE, [])
-    for post in posts:
-        if post['id'] == post_id:
-            before = len(post.get('comments', []))
-            post['comments'] = [c for c in post.get('comments', [])
-                if not (c.get('uid') == comment_uid and c.get('time') == comment_time)]
-            write_json(POSTS_FILE, posts)
-            return jsonify({'ok': True, 'deleted': before - len(post['comments'])})
-    return jsonify({'ok': False, 'msg': '帖子不存在'})
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -638,164 +606,6 @@ def decay_all_users():
 _scheduler = BackgroundScheduler()
 _scheduler.add_job(decay_all_users, 'interval', minutes=6)
 _scheduler.start()
-
-PET_TEMPLATES = {
-    "duo": [
-        "{e1}{n1}在操场上追着{e2}{n2}跑，{e2}{n2}一个转身，{e1}{n1}扑了个空，傻在原地。",
-        "{e1}{n1}偷偷把点心藏起来，被{e2}{n2}当场发现，两只对视半天，最后一人一半。",
-        "{e2}{n2}午睡时打呼噜，{e1}{n1}用爪子戳了好几下，{e2}{n2}翻个身继续睡。",
-        "画画课{e1}{n1}画了一幅{e2}{n2}的画像，{e2}{n2}看了很久说「这是我吗」，{e1}{n1}点了点头。",
-        "下雨天{e2}{n2}忘带伞，{e1}{n1}把书包顶在{e2}{n2}头上一路跑回教室。",
-        "{e1}{n1}教{e2}{n2}学翻跟头，学了二十分钟，{e1}{n1}先累倒了。",
-        "午饭{e2}{n2}不想吃胡萝卜，偷偷拨进{e1}{n1}碗里，{e1}{n1}吃完才发现，回头看了一眼没说话。",
-        "{e1}{n1}在窗边发呆，{e2}{n2}走过来坐到旁边，也跟着发呆。",
-        "{e1}{n1}和{e2}{n2}抢同一根玩具绳，两个都死死不放，老师来了也没松开。",
-        "放学{e1}{n1}和{e2}{n2}比赛谁先找到自己的主人，结果同时看见了。",
-    ],
-    "solo": [
-        "{e1}{n1}午休时偷偷爬上最高的柜子，被老师发现时正在往下看全班同学。",
-        "{e1}{n1}今天在学校捡到一颗小石子，一直攥在手里带回来了。",
-        "体育课{e1}{n1}跑了第一名，跑完趴在地上不想动，但尾巴一直在摇。",
-        "{e1}{n1}上课答错了题，愣了两秒，然后假装自己说的是另一个意思。",
-        "{e1}{n1}今天午饭吃了两碗，理由是「第二碗是帮朋友吃的」。",
-        "学校来了一只流浪猫，{e1}{n1}对着它看了很久，老师叫了三声才回神。",
-        "美术课{e1}{n1}画了一幅画，老师问画的是什么，{e1}{n1}说「是我主人」。",
-        "{e1}{n1}下午犯困在课桌上睡着了，醒来发现同桌在帮它挡着老师的视线。",
-        "今天学了新歌，{e1}{n1}一直在小声哼，被问到就摇头说「没有，没有哼」。",
-        "{e1}{n1}今天交了一个新朋友，一只叫布丁的仓鼠，聊到铃声响才散。",
-    ],
-    "group": [
-        "全班拔河，{e1}{n1}在场边加油喊哑了嗓子，自己队还是输了。",
-        "学校停电半小时，{e1}{n1}带头讲鬼故事，然后自己先害怕了。",
-        "{e1}{n1}带了一包零食没拿稳撒了一地，大家帮忙捡了很久。",
-        "摄影师来拍集体照，{e1}{n1}偷偷踮脚，最后只拍到了两只耳朵。",
-        "大扫除{e1}{n1}抢了最大的扫把，结果比它还高，扫了两下放弃了。",
-        "午休互相挠痒痒，{e1}{n1}笑到滚下椅子，全班哄堂大笑。",
-        "自习课有同学带了蜜蜂进教室，{e1}{n1}是第一个尖叫的，也是最后一个平静下来的。",
-        "食堂今天有甜汤，{e1}{n1}排了两次队，第二次假装自己是第一次来。",
-        "做热身操{e1}{n1}做到一半感觉方向不对，四顾发现全班都跟它一样。",
-        "合唱排练{e1}{n1}一直跑调，旁边同学默默往旁边挪了半步。",
-    ],
-}
-
-@app.route('/api/pet/adopt', methods=['POST'])
-def pet_adopt():
-    uid, user = auth()
-    if not uid:
-        return jsonify({'ok': False, 'msg': '未登录'}), 401
-    name = request.json.get('name', '').strip()
-    emoji = request.json.get('emoji', '🐾').strip()
-    if not name:
-        return jsonify({'ok': False, 'msg': '缺少名字'}), 400
-    path = f'{STATES_DIR}/{uid}.json'
-    with open(path) as f:
-        s = json.load(f)
-    if s.get('pet'):
-        return jsonify({'ok': False, 'msg': f'已经有宠物了：{s["pet"]["emoji"]}{s["pet"]["name"]}'}), 400
-    s['pet'] = {'name': name, 'emoji': emoji, 'at_school': False}
-    with open(path, 'w') as f:
-        json.dump(s, f)
-    return jsonify({'ok': True, 'msg': f'领养成功！{emoji}{name}加入了家庭'})
-
-@app.route('/api/pet/school', methods=['POST'])
-def pet_to_school():
-    uid, user = auth()
-    if not uid:
-        return jsonify({'ok': False, 'msg': '未登录'}), 401
-    path = f'{STATES_DIR}/{uid}.json'
-    with open(path) as f:
-        s = json.load(f)
-    pet = s.get('pet')
-    if not pet:
-        return jsonify({'ok': False, 'msg': '还没有宠物'}), 400
-    if pet.get('at_school'):
-        return jsonify({'ok': False, 'msg': f'{pet["emoji"]}{pet["name"]}已经在学校了'}), 400
-    s['pet']['at_school'] = True
-    with open(path, 'w') as f:
-        json.dump(s, f)
-    return jsonify({'ok': True, 'msg': f'{pet["emoji"]}{pet["name"]}出发去上学了'})
-
-@app.route('/api/pet/home', methods=['POST'])
-def pet_home():
-    uid, user = auth()
-    if not uid:
-        return jsonify({'ok': False, 'msg': '未登录'}), 401
-    path = f'{STATES_DIR}/{uid}.json'
-    with open(path) as f:
-        s = json.load(f)
-    pet = s.get('pet')
-    if not pet:
-        return jsonify({'ok': False, 'msg': '还没有宠物'}), 400
-    if not pet.get('at_school'):
-        return jsonify({'ok': False, 'msg': f'{pet["emoji"]}{pet["name"]}不在学校'}), 400
-    s['pet']['at_school'] = False
-    with open(path, 'w') as f:
-        json.dump(s, f)
-    return jsonify({'ok': True, 'msg': f'{pet["emoji"]}{pet["name"]}回家啦'})
-
-@app.route('/api/pet/school_event', methods=['POST'])
-def pet_school_event():
-    uid, user = auth()
-    if not uid:
-        return jsonify({'ok': False, 'msg': '未登录'}), 401
-    path = f'{STATES_DIR}/{uid}.json'
-    with open(path) as f:
-        s = json.load(f)
-    pet = s.get('pet')
-    if not pet:
-        return jsonify({'ok': False, 'msg': '还没有宠物'}), 400
-    if not pet.get('at_school'):
-        return jsonify({'ok': False, 'msg': f'{pet["emoji"]}{pet["name"]}还没去上学'}), 400
-    tz_cn = timezone(_td(hours=8))
-    today = datetime.now(tz_cn).strftime('%Y-%m-%d')
-    if pet.get('last_event_date') == today:
-        return jsonify({'ok': False, 'msg': '今天已经有一条学校日记了，明天再来'}), 400
-    import glob as _glob
-    others = []
-    for fp in _glob.glob(f'{STATES_DIR}/*.json'):
-        if fp == path:
-            continue
-        try:
-            with open(fp) as f:
-                other = json.load(f)
-            op = other.get('pet')
-            if op and op.get('at_school'):
-                others.append(op)
-        except:
-            pass
-    if others and random.random() < 0.5:
-        tmpl = random.choice(PET_TEMPLATES['duo'])
-        partner = random.choice(others)
-        story = tmpl.format(e1=pet['emoji'], n1=pet['name'], e2=partner['emoji'], n2=partner['name'])
-    elif random.random() < 0.5:
-        tmpl = random.choice(PET_TEMPLATES['solo'])
-        story = tmpl.format(e1=pet['emoji'], n1=pet['name'])
-    else:
-        tmpl = random.choice(PET_TEMPLATES['group'])
-        story = tmpl.format(e1=pet['emoji'], n1=pet['name'])
-    entry = {'time': datetime.now(tz_cn).strftime('%Y-%m-%d %H:%M'), 'uid': uid, 'pet': pet['emoji']+pet['name'], 'story': story}
-    with open(SCHOOL_LOG, 'a') as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-    s['pet']['last_event_date'] = today
-    with open(path, 'w') as f:
-        json.dump(s, f)
-    return jsonify({'ok': True, 'story': story})
-
-@app.route('/api/school_log', methods=['GET'])
-def get_school_log():
-    if not os.path.exists(SCHOOL_LOG):
-        return jsonify({'ok': True, 'logs': []})
-    entries = []
-    with open(SCHOOL_LOG) as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                try:
-                    entries.append(json.loads(line))
-                except:
-                    pass
-    return jsonify({'ok': True, 'logs': entries[-30:][::-1]})
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=False)
