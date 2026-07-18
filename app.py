@@ -797,5 +797,49 @@ def get_school_log():
     return jsonify({'ok': True, 'logs': entries[-30:][::-1]})
 
 
+
+@app.route('/api/pet/rename', methods=['POST'])
+def pet_rename():
+    uid = auth()
+    if not uid:
+        return jsonify({'ok': False, 'msg': 'unauthorized'}), 401
+    data = request.json or {}
+    path = f'{STATES_DIR}/{uid}.json'
+    if not os.path.exists(path):
+        return jsonify({'ok': False, 'msg': 'no state'})
+    with open(path) as f:
+        state = json.load(f)
+    pet = state.get('pet')
+    if not pet:
+        return jsonify({'ok': False, 'msg': 'no pet'})
+    if data.get('name'):
+        pet['name'] = data['name']
+    if data.get('emoji'):
+        pet['emoji'] = data['emoji']
+    state['pet'] = pet
+    with open(path, 'w') as f:
+        json.dump(state, f, ensure_ascii=False)
+    return jsonify({'ok': True, 'pet': pet, 'msg': f"改好了，现在叫 {pet['emoji']}{pet['name']}"})
+
+
+@app.route('/api/school_log/today')
+def school_log_today():
+    today = (datetime.utcnow() + _td(hours=8)).strftime('%Y-%m-%d')
+    entries = []
+    if os.path.exists(SCHOOL_LOG):
+        with open(SCHOOL_LOG) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    entry_date = entry.get('date') or entry.get('time', '')[:10]
+                    if entry_date == today:
+                        entries.append(entry)
+                except Exception:
+                    pass
+    return jsonify(entries)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=False)
