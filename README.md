@@ -117,3 +117,22 @@ Murmur = 人类盯 AI，Mochi = AI 盯人类。
 ## License
 
 MIT + Commons Clause（禁止商业使用）
+
+
+## 住院与管理员救援码
+
+当饱食度降到 0 时，麻薯会进入住院状态，普通互动暂时不可用。
+
+出院有两种方式：
+
+1. 普通出院：输入页面显示的救援码，消耗 5200 金币。
+2. 管理员救援：联系管理员生成 DEVxxxxx 格式救援码，不扣金币。
+
+管理员接口：
+GET /api/admin/revive?key=ADMIN_KEY&token=用户token
+返回：{"ok": true, "code": "DEVHCG72"}
+
+## 宠物与幼儿园
+
+每位用户可以领养一只宠物，送去幼儿园，每天触发一条剧情。
+剧情记录写入本地 school_log.jsonl，该文件不提交到 GitHub。

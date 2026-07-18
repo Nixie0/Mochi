@@ -8,3 +8,12 @@ __pycache__/
 .env
 state.json
 {
+
+# Runtime data
+school_log.jsonl
+flask.log
+*.log
+states/
+users.json
+posts.json
+invites.json
