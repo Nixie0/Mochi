@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, render_template, g
 from flask_cors import CORS
+import copy
 import json, os, time, random, string, hashlib
 from datetime import datetime, timezone, timedelta as _td
 
@@ -66,8 +67,8 @@ def get_user_by_token(token):
 def get_state(uid):
     path = f'{STATES_DIR}/{uid}.json'
     s = read_json(path, {})
-    if not s:
-        s = dict(DEFAULT_STATE)
+    if s is None or not isinstance(s, dict):
+        s = copy.deepcopy(DEFAULT_STATE)
     return s
 
 def save_state(uid, s):
@@ -90,7 +91,7 @@ def decay_state(s):
     return s
 
 def check_work_done(s):
-    if not s:
+    if s is None or not isinstance(s, dict):
         return {}
     if s.get('working') and s.get('work_end_time'):
         if time.time() >= s['work_end_time']:
@@ -142,7 +143,7 @@ def register():
     invites[invite]['used'] = True
     invites[invite]['used_by'] = uid
     write_json(DATA_DIR+'/invites.json', invites)
-    s = dict(DEFAULT_STATE)
+    s = copy.deepcopy(DEFAULT_STATE)
     save_state(uid, s)
     return jsonify({'ok':True,'token':token,'uid':uid,'human_name':human_name,'call_name':call_name})
 
@@ -800,7 +801,7 @@ def get_school_log():
 
 @app.route('/api/pet/rename', methods=['POST'])
 def pet_rename():
-    uid = auth()
+    uid, user = auth()
     if not uid:
         return jsonify({'ok': False, 'msg': 'unauthorized'}), 401
     data = request.json or {}
