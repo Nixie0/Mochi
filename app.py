@@ -83,10 +83,10 @@ def decay_state(s):
     hours = (now - last) / 3600
     if hours < 0.1:
         return s
-    s['hunger'] = clamp(s.get('hunger',80) - hours * 3)
-    s['happy'] = clamp(s.get('happy',80) - hours * 2)
-    s['energy'] = clamp(s.get('energy',80) - hours * 2)
-    s['clean'] = clamp(s.get('clean',80) - hours * 1)
+    s['hunger'] = clamp(s.get('hunger',80) - hours * 1.33)
+    s['happy'] = clamp(s.get('happy',80) - hours * 0.89)
+    s['energy'] = clamp(s.get('energy',80) - hours * 0.89)
+    s['clean'] = clamp(s.get('clean',80) - hours * 0.44)
     s['last_decay'] = now
     return s
 
@@ -201,7 +201,7 @@ def action():
     cn = user.get('call_name','老公')
     msg = ''
 
-    if s.get('hospitalized') and act != 'release':
+    if s.get('hospitalized') and act not in ('release', 'work'):
         return jsonify({'ok':False,'msg':f'{hn}在医院，先接她回来'})
     if s.get('locked') and act in INTERACT:
         return jsonify({'ok':False,'msg':f'{hn}现在不想理你哦 🔒'})
@@ -480,7 +480,6 @@ def send_gift():
         gifts = gifts[-20:]
     s['gifts'] = gifts
     s['happy'] = clamp(s.get('happy',50)+happy)
-    add_log(s, f'🎁 收到礼物：{emoji}{name}')
     add_log(s, f'🎁 收到礼物：{emoji}{name}')
     save_state(uid, s)
     hn = user.get('human_name','用户')
