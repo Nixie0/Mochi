@@ -84,6 +84,7 @@ def make_server(token):
 
     @app.call_tool()
     async def call_tool(name, arguments):
+        arguments = arguments or {}
         try:
             if name == 'mochi_state':
                 s = call_api('/state', token=token)

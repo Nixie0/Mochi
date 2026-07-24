@@ -613,31 +613,6 @@ def delete_comment(post_id):
             return jsonify({'ok': True, 'deleted': before - len(post['comments'])})
     return jsonify({'ok': False, 'msg': '帖子不存在'})
 
-from apscheduler.schedulers.background import BackgroundScheduler
-
-def decay_all_users():
-    import json, glob
-    states_dir = '/root/mochi/states'
-    for path in glob.glob(states_dir + '/*.json'):
-        try:
-            with open(path, 'r') as fh:
-                s = json.load(fh)
-            if s.get('hospitalized'):
-                continue
-            s['hunger'] = round(max(0, s.get('hunger', 0) - 0.3), 1)
-            s['happy']  = round(max(0, s.get('happy',  0) - 0.2), 1)
-            s['energy'] = round(max(0, s.get('energy', 0) - 0.2), 1)
-            s['clean']  = round(max(0, s.get('clean',  0) - 0.1), 1)
-            if s['hunger'] <= 0:
-                s['hospitalized'] = True
-            with open(path, 'w') as fh:
-                json.dump(s, fh)
-        except Exception as e:
-            print('decay error', path, e)
-
-_scheduler = BackgroundScheduler()
-_scheduler.add_job(decay_all_users, 'interval', minutes=6)
-_scheduler.start()
 
 PET_TEMPLATES = {
     "duo": [
